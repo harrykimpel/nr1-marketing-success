@@ -1,7 +1,7 @@
 {
   "schemaType": "LAUNCHER",
   "id": "nr1-marketing-success",
-  "displayName": "Nr1MarketingSuccess",
+  "displayName": "Marketing Success Tracker",
   "description": "Describe me",
   "rootNerdletId": "da6637a2-7c8e-4ffe-a802-6a7fd9ae7494.home"
 }
