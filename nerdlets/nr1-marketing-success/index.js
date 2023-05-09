@@ -12,7 +12,7 @@ const NRQL_QUERY_LIMIT_DEFAULT = 50;
 const SUB_MENU_HEIGHT = 45;
 const BLURRED_LINK_OPACITY = 0.3;
 const FOCUSED_LINK_OPACITY = 0.8;
-const height = 2000;
+const height = 3000;
 const width = 1400;
 const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
 
@@ -35,7 +35,7 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
       accountId: 1202289,
       accounts: null,
       selectedAccount: null,
-      hideLabels: false
+      hideLabels: true
     };
 
     this.handleDetailClose = this.handleDetailClose.bind(this);
@@ -51,12 +51,12 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
     await sleep(2000);
     i++;
     await this.fetchData2(i);
-    await sleep(2000);
+    /*await sleep(2000);
     i++;
     await this.fetchData2(i);
-    await sleep(2000);
+    /*await sleep(2000);
     i++;
-    await this.fetchData2(i);
+    await this.fetchData2(i);*/
     /*await sleep(2000);
     i++;
     await this.fetchData2(i);*/
@@ -73,13 +73,13 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
     this.stopTimer();
   }
 
-  createNrqlQuery(url, client_ip) {
+  createNrqlQuery(url, client_ip, limit) {
     return (
       `{
         actor {
           account(id: 1202289) {
             e: nrql(
-              query: "FROM Metric SELECT uniqueCount(fastly.log.marketing.msgcount) as 'value' where metricName = 'fastly.log.marketing.msgcount' and  url like '`+ url + `' ` + client_ip + ` and request_referer not like '%staging-%' and request_referer not like 'https://%zoom.us/' and request_referer not like '' facet request_referer, client_ip limit 20 since 1 day ago"
+              query: "FROM Metric SELECT uniqueCount(fastly.log.marketing.msgcount) as 'value' where metricName = 'fastly.log.marketing.msgcount' and ` + url + ` ` + client_ip + ` and request_referer not like '%staging-%' and request_referer not like 'https://%zoom.us/' and request_referer not like '' facet request_referer limit ` + limit + ` since 1 day ago"
             ) {
               results
             }
@@ -93,9 +93,12 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
     console.log('fetchData');
 
     const { accountId } = this.state;
-    var nrql = this.createNrqlQuery('%thank-you%', '');
+    var nrql = this.createNrqlQuery(" url like '%thank-you%' ", '', 20);
     //console.log('nrql: '+nrql)
-    var { nodesFetch, linksFetch } = await fetchRelationshipFacets(accountId, nrql, true, -1, level);
+    var { nodesFetch, linksFetch } = await fetchRelationshipFacets(accountId, nrql, true, -1, level, 0);
+
+    console.log('nodes (' + nodesFetch.length + '): ' + JSON.stringify(nodesFetch));
+    console.log('links (' + linksFetch.length + '): ' + JSON.stringify(linksFetch));
 
     this.setState({
       isLoading: true,
@@ -104,18 +107,27 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
     });
   }
 
+  compareFn(a, b) {
+    return a.source - b.source
+  }
+
   async fetchData2(level) {
     console.log('fetchData2');
 
     const { accountId, links, nodes } = this.state;
 
+    var nodesRoot = nodes;
+    var linksRoot = links;
     var x = 0;
+    var nodesRootLength = nodes.length;
+    nodes.sort(this.compareFn);
     nodes.forEach(async (node) => {
-      if (node.level == level - 1) {
-        var nrql = this.createNrqlQuery(node.name[0].replace('https://newrelic.com', ''), " and client_ip = '" + node.name[1] + "' ");
-        var nodesRoot = nodes;
-        var linksRoot = links;
-        const { nodesFetch, linksFetch } = await fetchRelationshipFacets(accountId, nrql, false, node.source, level);
+      if (node.level == level - 1 &&
+        node.referer != undefined) {// &&
+        //node.referer != '/') {
+        //var nrql = this.createNrqlQuery(node.name[0].replace('https://newrelic.com', ''), " and client_ip = '" + node.name[1] + "' ");
+        var nrql = this.createNrqlQuery(" url = '" + node.referer + "' ", '', 5);
+        const { nodesFetch, linksFetch } = await fetchRelationshipFacets(accountId, nrql, false, node.source, level, nodesRootLength);
 
         if (nodesFetch != undefined &&
           nodesFetch.length > 0) {
@@ -127,7 +139,7 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
             linksRoot.push({
               color: node2.color,
               source: i,
-              target: node2.source,
+              target: node2.target,
               value: node2.value
             });
             i++
@@ -140,11 +152,10 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
           nodes: nodesRoot
         });
 
+        nodesRootLength = nodesRoot.length;
+        console.log('nodes (' + nodesRootLength + '): ' + JSON.stringify(nodesRoot));
+        console.log('links (' + linksRoot.length + '): ' + JSON.stringify(linksRoot));
         x++;
-        if (level == 2) {
-          console.log('nodesRoot (' + nodesRoot.length + '): ' + JSON.stringify(nodesRoot));
-          console.log('linksRoot (' + linksRoot.length + '): ' + JSON.stringify(linksRoot));
-        }
       }
     })
   }
@@ -227,7 +238,7 @@ export default class Nr1MarketingCampaignsNerdlet extends React.Component {
       return { ...link, opacity };
     });
 
-    const renderNodes = hideLabels ? nodes.map((n, idx) => ({ ...n, name: `${idx}` })) : nodes;
+    const renderNodes = hideLabels ? nodes.map((n, idx) => ({ ...n, name: `${n.display}` })) : nodes;
 
     return (
       <Stack
